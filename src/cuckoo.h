@@ -5,7 +5,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <time.h>
-#include <pthread.h>
 #include "murmurhash2.h"
 
 // Defines whether 32bit or 64bit hash function will be used.
@@ -38,7 +37,6 @@ typedef struct {
     SubCF *filters;
 } CuckooFilter;
 
-pthread_rwlock_t lock;
 
 #define CUCKOO_GEN_HASH(s, n) MurmurHash64A_Bloom(s, n, 0)
 
