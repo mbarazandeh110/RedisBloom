@@ -35,22 +35,27 @@ docker exec -it redis-redisbloom bash
 # 127.0.0.1:6379>
 ```
 
-Create a new bloom filter by adding a new item:
+Create a new cuckoo filter with capacity 64 and TTL 10 second (default 1800s):
 ```
-# 127.0.0.1:6379> BF.ADD newFilter foo
+# 127.0.0.1:6379> CF.RESERVE newFilter 2 TTL 10
+```
+
+Add a new item
+```
+# 127.0.0.1:6379> CF.ADD newFilter foo
 (integer) 1
 ```
 
 Find out whether an item exists in the filter:
 ```
-# 127.0.0.1:6379> BF.EXISTS newFilter foo
+# 127.0.0.1:6379> CF.EXISTS newFilter foo
 (integer) 1
 ```
 
 In this case, `1` means that the `foo` is most likely in the set represented by `newFilter`. But recall that false positives are possible with Bloom filters.
 
 ```
-# 127.0.0.1:6379> BF.EXISTS newFilter bar
+# 127.0.0.1:6379> CF.EXISTS newFilter bar
 (integer) 0
 ```
 

@@ -34,48 +34,15 @@ TEST_F(cuckoo, testBasicOps) {
     ASSERT_NE(1, CuckooFilter_Check(&ck, kbaz));
     ASSERT_EQ(2, ck.numItems);
 
-    ASSERT_EQ(CuckooInsert_Inserted, CuckooFilter_InsertUnique(&ck, kbaz));
+    ASSERT_EQ(CuckooInsert_Inserted, CuckooFilter_Insert(&ck, kbaz));
     ASSERT_EQ(3, ck.numItems);
 
-    ASSERT_EQ(CuckooInsert_Exists, CuckooFilter_InsertUnique(&ck, kfoo));
-
-    // Try deleting items
-    ASSERT_NE(0, CuckooFilter_Delete(&ck, kfoo));
-    ASSERT_EQ(2, ck.numItems);
-    ASSERT_EQ(0, CuckooFilter_Check(&ck, kfoo));
-
-    ASSERT_EQ(0, CuckooFilter_Delete(&ck, kfoo));
-    ASSERT_EQ(2, ck.numItems);
 
     CuckooFilter_Free(&ck);
 
     // Try capacity < numBuckets == 1
     CuckooFilter_Init(&ck, 8, 32, 500, 1);
     ASSERT_EQ(1, ck.numBuckets);
-    CuckooFilter_Free(&ck);
-}
-
-TEST_F(cuckoo, testCount) {
-    CuckooFilter ck;
-    CuckooFilter_Init(&ck, 10, DEFAULT_BUCKETSIZE, 500, 1);
-    CuckooHash kfoo = CUCKOO_GEN_HASH("foo", 3);
-
-    ASSERT_EQ(0, CuckooFilter_Count(&ck, kfoo));
-
-    ASSERT_EQ(0, ck.numItems);
-    ASSERT_EQ(CuckooInsert_Inserted, CuckooFilter_Insert(&ck, kfoo));
-
-    ASSERT_EQ(1, ck.numItems);
-    ASSERT_EQ(1, CuckooFilter_Count(&ck, kfoo));
-
-    ASSERT_EQ(CuckooInsert_Inserted, CuckooFilter_Insert(&ck, kfoo));
-    ASSERT_EQ(2, CuckooFilter_Count(&ck, kfoo));
-
-    for (size_t ii = 0; ii < 8; ++ii) {
-        ASSERT_EQ(CuckooInsert_Inserted, CuckooFilter_Insert(&ck, kfoo));
-        ASSERT_EQ(3 + ii, CuckooFilter_Count(&ck, kfoo));
-    }
-    ASSERT_EQ(10, ck.numItems);
     CuckooFilter_Free(&ck);
 }
 
@@ -102,11 +69,6 @@ TEST_F(cuckoo, testRelocations) {
         ASSERT_NE(0, CuckooFilter_Check(&ck, hash));
     }
 
-    for (size_t ii = 0; ii < NUM_BULK; ++ii) {
-        CuckooHash hash = CUCKOO_GEN_HASH(&ii, sizeof ii);
-        ASSERT_EQ(CuckooInsert_Exists, CuckooFilter_InsertUnique(&ck, hash));
-        ASSERT_EQ(CuckooInsert_Inserted, CuckooFilter_Insert(&ck, hash));
-    }
 
     CuckooFilter_Free(&ck);
 }
@@ -118,18 +80,6 @@ static void doFill(CuckooFilter *ck) {
     }
 }
 
-static size_t countColls(CuckooFilter *ck) {
-    size_t ret = 0;
-    for (size_t ii = 0; ii < NUM_BULK; ++ii) {
-        CuckooHash hash = CUCKOO_GEN_HASH(&ii, sizeof ii);
-        size_t count = CuckooFilter_Count(ck, hash);
-        ASSERT_NE(count, 0);
-        if (count > 1) {
-            ret++;
-        }
-    }
-    return ret;
-}
 
 TEST_F(cuckoo, testFPR) {
     // We should never expect > 3% FPR (False positive rate) on a single filter.
@@ -166,27 +116,6 @@ TEST_F(cuckoo, testFPR) {
     CuckooFilter_Free(&ck);
 }
 
-TEST_F(cuckoo, testBulkDel) {
-    CuckooFilter ck;
-    CuckooFilter_Init(&ck, NUM_BULK / 8, DEFAULT_BUCKETSIZE, 500, 1);
-    doFill(&ck);
-    for (size_t ii = 0; ii < NUM_BULK; ++ii) {
-        ASSERT_EQ(1, CuckooFilter_Delete(&ck, CUCKOO_GEN_HASH(&ii, sizeof ii)));
-    }
-    ASSERT_EQ(0, ck.numItems);
-    CuckooFilter_Free(&ck);
-}
-
-TEST_F(cuckoo, testBulkDelwithExpansion) {
-    CuckooFilter ck;
-    CuckooFilter_Init(&ck, NUM_BULK / 8, DEFAULT_BUCKETSIZE, 500, 2);
-    doFill(&ck);
-    for (size_t ii = 0; ii < NUM_BULK; ++ii) {
-        ASSERT_EQ(1, CuckooFilter_Delete(&ck, CUCKOO_GEN_HASH(&ii, sizeof ii)));
-    }
-    ASSERT_EQ(0, ck.numItems);
-    CuckooFilter_Free(&ck);
-}
 
 TEST_F(cuckoo, testBucketSize) {
     CuckooFilter ck;

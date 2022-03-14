@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <time.h>
+#include <pthread.h>
 #include "murmurhash2.h"
 
 // Defines whether 32bit or 64bit hash function will be used.
@@ -21,6 +23,7 @@ typedef uint8_t MyCuckooBucket;
 typedef struct {
     uint32_t numBuckets;
     uint8_t bucketSize;
+    time_t expire_time;
     MyCuckooBucket *data;
 } SubCF;
 
@@ -31,9 +34,11 @@ typedef struct {
     uint16_t numFilters;
     uint16_t bucketSize;
     uint16_t maxIterations;
-    uint16_t expansion;
+    uint16_t ttl;
     SubCF *filters;
 } CuckooFilter;
+
+pthread_rwlock_t lock;
 
 #define CUCKOO_GEN_HASH(s, n) MurmurHash64A_Bloom(s, n, 0)
 
@@ -57,13 +62,10 @@ typedef enum {
 } CuckooInsertStatus;
 
 int CuckooFilter_Init(CuckooFilter *filter, uint64_t capacity, uint16_t bucketSize,
-                      uint16_t maxIterations, uint16_t expansion);
+                      uint16_t maxIterations, uint16_t ttl);
 void CuckooFilter_Free(CuckooFilter *filter);
-CuckooInsertStatus CuckooFilter_InsertUnique(CuckooFilter *filter, CuckooHash hash);
 CuckooInsertStatus CuckooFilter_Insert(CuckooFilter *filter, CuckooHash hash);
-int CuckooFilter_Delete(CuckooFilter *filter, CuckooHash hash);
 int CuckooFilter_Check(const CuckooFilter *filter, CuckooHash hash);
-uint64_t CuckooFilter_Count(const CuckooFilter *filter, CuckooHash);
 void CuckooFilter_Compact(CuckooFilter *filter, bool cont);
 void CuckooFilter_GetInfo(const CuckooFilter *cf, CuckooHash hash, CuckooKey *out);
 #endif

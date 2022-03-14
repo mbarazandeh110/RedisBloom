@@ -42,7 +42,7 @@ LIBTDIGEST_LIBDIR = $(ROOT)/deps/t-digest-c/build/src
 LIBTDIGEST = $(LIBTDIGEST_LIBDIR)/libtdigest_static.a
 
 # Flags for preprocessor
-MODULE_LDFLAGS = -lm -lc -L$(LIBTDIGEST_LIBDIR) -ltdigest_static
+MODULE_LDFLAGS = -lm -lc -L$(LIBTDIGEST_LIBDIR) -ltdigest_static -pthread
 
 DEPS = $(ROOT)/contrib/MurmurHash2.o \
 	   $(ROOT)/rmutil/util.o \
