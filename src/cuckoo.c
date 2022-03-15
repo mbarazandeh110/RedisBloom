@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <math.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #ifndef CUCKOO_MALLOC
 #define CUCKOO_MALLOC malloc
@@ -11,6 +12,8 @@
 #define CUCKOO_REALLOC realloc
 #define CUCKOO_FREE free
 #endif
+
+pthread_rwlock_t lock;
 
 // int globalCuckooHash64Bit;
 
