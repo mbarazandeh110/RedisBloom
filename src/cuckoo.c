@@ -22,8 +22,8 @@ void *rotate(void *arg){
 
     while (true)
     {
-        pthread_rwlock_wrlock(&(filter->lock));
         time_t now = time(0);
+        pthread_rwlock_wrlock(&(filter->lock));
         int del_count = 0;
         for(int i=0; i < filter->numFilters; i++){
             if (filter->filters[i].expire_time < now){
