@@ -4,7 +4,6 @@
 #include <assert.h>
 #include <math.h>
 #include <unistd.h>
-#include <pthread.h>
 
 #ifndef CUCKOO_MALLOC
 #define CUCKOO_MALLOC malloc
@@ -13,7 +12,6 @@
 #define CUCKOO_FREE free
 #endif
 
-pthread_rwlock_t lock;
 
 // int globalCuckooHash64Bit;
 
@@ -24,8 +22,7 @@ void *rotate(void *arg){
 
     while (true)
     {
-        pthread_rwlock_wrlock(&lock);
-
+        pthread_rwlock_wrlock(&(filter->lock));
         time_t now = time(0);
         int del_count = 0;
         for(int i=0; i < filter->numFilters; i++){
@@ -63,7 +60,7 @@ void *rotate(void *arg){
             }
         }
 
-        pthread_rwlock_unlock(&lock);
+        pthread_rwlock_unlock(&(filter->lock));
 
         sleep(filter->ttl);
     }
@@ -102,7 +99,7 @@ int CuckooFilter_Init(CuckooFilter *filter, uint64_t capacity, uint16_t bucketSi
     if (CuckooFilter_Grow(filter) != 0) {
         return -1; // LCOV_EXCL_LINE memory failure
     }
-    pthread_rwlock_init(&lock, NULL);
+    pthread_rwlock_init(&(filter->lock), NULL);
 
 	pthread_create(&(filter->thread_rotate), NULL, rotate, filter);
     return 0;
@@ -110,7 +107,7 @@ int CuckooFilter_Init(CuckooFilter *filter, uint64_t capacity, uint16_t bucketSi
 
 void CuckooFilter_Free(CuckooFilter *filter) {
     pthread_cancel(filter->thread_rotate);
-    pthread_rwlock_destroy(&lock);
+    pthread_rwlock_destroy(&(filter->lock));
     for (uint16_t ii = 0; ii < filter->numFilters; ++ii) {
         CUCKOO_FREE(filter->filters[ii].data);
     }
@@ -118,12 +115,12 @@ void CuckooFilter_Free(CuckooFilter *filter) {
 }
 
 static int CuckooFilter_Grow(CuckooFilter *filter) {
-    pthread_rwlock_rdlock(&lock);
+    pthread_rwlock_rdlock(&(filter->lock));
     SubCF *filtersArray =
         CUCKOO_REALLOC(filter->filters, sizeof(*filtersArray) * (filter->numFilters + 1));
 
     if (!filtersArray) {
-        pthread_rwlock_unlock(&lock);
+        pthread_rwlock_unlock(&(filter->lock));
         return -1; // LCOV_EXCL_LINE memory failure
     }
 
@@ -134,13 +131,13 @@ static int CuckooFilter_Grow(CuckooFilter *filter) {
     currentFilter->data =
         CUCKOO_CALLOC((size_t)currentFilter->numBuckets * filter->bucketSize, sizeof(CuckooBucket));
     if (!currentFilter->data) {
-        pthread_rwlock_unlock(&lock);
+        pthread_rwlock_unlock(&(filter->lock));
         return -1; // LCOV_EXCL_LINE memory failure
     }
 
     filter->numFilters++;
     filter->filters = filtersArray;
-    pthread_rwlock_unlock(&lock);
+    pthread_rwlock_unlock(&(filter->lock));
     return 0;
 }
 
@@ -201,19 +198,19 @@ static int Filter_Delete(const SubCF *filter, const LookupParams *params) {
            Bucket_Delete(&filter->data[loc2], bucketSize, params->fp);
 }
 
-static int CuckooFilter_CheckFP(const CuckooFilter *filter, const LookupParams *params) {
-    pthread_rwlock_rdlock (&lock);
+static int CuckooFilter_CheckFP(CuckooFilter *filter, const LookupParams *params) {
+    pthread_rwlock_rdlock (&(filter->lock));
     for (uint16_t ii = 0; ii < filter->numFilters; ++ii) {
         if (Filter_Find(&filter->filters[ii], params)) {
-            pthread_rwlock_unlock(&lock);
+            pthread_rwlock_unlock(&(filter->lock));
             return 1;
         }
     }
-    pthread_rwlock_unlock(&lock);
+    pthread_rwlock_unlock(&(filter->lock));
     return 0;
 }
 
-int CuckooFilter_Check(const CuckooFilter *filter, CuckooHash hash) {
+int CuckooFilter_Check(CuckooFilter *filter, CuckooHash hash) {
     LookupParams params;
     getLookupParams(hash, &params);
     return CuckooFilter_CheckFP(filter, &params);
@@ -263,13 +260,13 @@ static CuckooInsertStatus Filter_KOInsert(CuckooFilter *filter, SubCF *curFilter
                                           const LookupParams *params);
 
 static CuckooInsertStatus CuckooFilter_InsertFP(CuckooFilter *filter, const LookupParams *params) {
-    pthread_rwlock_rdlock(&lock);
+    pthread_rwlock_rdlock(&(filter->lock));
     for (uint16_t ii = filter->numFilters; ii > 0; --ii) {
         uint8_t *slot = Filter_FindAvailable(&filter->filters[ii - 1], params);
         if (slot) {
             *slot = params->fp;
             filter->numItems++;
-            pthread_rwlock_unlock(&lock);
+            pthread_rwlock_unlock(&(filter->lock));
             return CuckooInsert_Inserted;
         }
     }
@@ -279,11 +276,11 @@ static CuckooInsertStatus CuckooFilter_InsertFP(CuckooFilter *filter, const Look
         Filter_KOInsert(filter, &filter->filters[filter->numFilters - 1], params);
     if (status == CuckooInsert_Inserted) {
         filter->numItems++;
-        pthread_rwlock_unlock(&lock);
+        pthread_rwlock_unlock(&(filter->lock));
         return CuckooInsert_Inserted;
     }
 
-    pthread_rwlock_unlock(&lock);
+    pthread_rwlock_unlock(&(filter->lock));
 
     if (CuckooFilter_Grow(filter) != 0) {
         return CuckooInsert_MemAllocFailed;

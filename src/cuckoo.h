@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <time.h>
+#include <pthread.h>
 #include "murmurhash2.h"
 
 // Defines whether 32bit or 64bit hash function will be used.
@@ -35,6 +36,7 @@ typedef struct {
     uint16_t maxIterations;
     uint16_t ttl;
     SubCF *filters;
+    pthread_rwlock_t lock;
     pthread_t thread_rotate;
 } CuckooFilter;
 
@@ -64,7 +66,7 @@ int CuckooFilter_Init(CuckooFilter *filter, uint64_t capacity, uint16_t bucketSi
                       uint16_t maxIterations, uint16_t ttl);
 void CuckooFilter_Free(CuckooFilter *filter);
 CuckooInsertStatus CuckooFilter_Insert(CuckooFilter *filter, CuckooHash hash);
-int CuckooFilter_Check(const CuckooFilter *filter, CuckooHash hash);
+int CuckooFilter_Check(CuckooFilter *filter, CuckooHash hash);
 void CuckooFilter_Compact(CuckooFilter *filter, bool cont);
 void CuckooFilter_GetInfo(const CuckooFilter *cf, CuckooHash hash, CuckooKey *out);
 #endif
