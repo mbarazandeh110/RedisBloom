@@ -35,6 +35,7 @@ typedef struct {
     uint16_t maxIterations;
     uint16_t ttl;
     SubCF *filters;
+    pthread_t thread_rotate;
 } CuckooFilter;
 
 
