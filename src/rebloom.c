@@ -8,6 +8,7 @@
 #include "version.h"
 #include "rmutil/util.h"
 
+#include <stdlib.h>
 #include <assert.h>
 #include <strings.h> // strncasecmp
 #include <string.h>
@@ -488,6 +489,19 @@ static int BFLoadChunk_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **arg
     }
 }
 
+
+int IsDigit(char *numArray)
+{
+    int i;
+    const int len = strlen(numArray);
+
+    for (i = 0; i < len; i++)
+    {
+        if (!isdigit(numArray[i])) return 0;
+    }
+    return 1;
+}
+
 /** CF.RESERVE <KEY> <CAPACITY> [BUCKETSIZE] [MAXITERATIONS] [TTL] */
 static int CFReserve_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_AutoMemory(ctx);
@@ -559,8 +573,15 @@ static int cfInsertCommon(RedisModuleCtx *ctx, RedisModuleString *keystr, RedisM
     int status = cfGetFilter(key, &cf);
 
     if (status == SB_EMPTY && options->autocreate) {
+        long long ttl = CF_DEFAULT_TTL;
+        char* ttl_env = getenv("TTL_REDIS_CUCKOO");
+        if(ttl_env){
+            if (IsDigit(ttl_env)){
+                ttl = atoll(ttl_env);
+            }
+        }
         if ((cf = cfCreate(key, options->capacity, CF_DEFAULT_BUCKETSIZE, CF_MAX_ITERATIONS,
-                           CF_DEFAULT_TTL)) == NULL) {
+                           ttl)) == NULL) {
             return RedisModule_ReplyWithError(ctx, "Could not create filter"); // LCOV_EXCL_LINE
         }
     } else if (status != SB_OK) {
