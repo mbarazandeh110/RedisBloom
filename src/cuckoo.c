@@ -22,18 +22,25 @@ void *rotate(void *arg){
 
     while (true)
     {
+        pthread_rwlock_rdlock(&(filter->lock));
         time_t now = time(0);
-        pthread_rwlock_wrlock(&(filter->lock));
         int del_count = 0;
-        for(int i=0; i < filter->numFilters; i++){
-            if (filter->filters[i].expire_time < now){
-                del_count +=1;
-                CUCKOO_FREE(filter->filters[i].data);
-            }else{
-                break;
-            }
+        if (filter->numFilters > 0 && filter->filters[0].expire_time < now){
+            del_count = 1;
         }
+        pthread_rwlock_unlock(&(filter->lock));
+
         if(del_count > 0){
+            pthread_rwlock_wrlock(&(filter->lock));
+            del_count = 0;
+            for(int i=0; i < filter->numFilters; i++){
+                if (filter->filters[i].expire_time < now){
+                    del_count +=1;
+                    CUCKOO_FREE(filter->filters[i].data);
+                }else{
+                    break;
+                }
+            }
             uint16_t new_len = filter->numFilters - del_count;
             if (new_len == 0){
                 CUCKOO_FREE(filter->filters);
@@ -41,7 +48,7 @@ void *rotate(void *arg){
                     SubCF *currentFilter = filtersArray;
                     currentFilter->bucketSize = filter->bucketSize;
                     currentFilter->numBuckets = filter->numBuckets;
-                    currentFilter->expire_time = time(0) + filter->ttl;
+                    currentFilter->expire_time = time(0) + filter->ttl*2;
                     currentFilter->data =
                     CUCKOO_CALLOC((size_t)currentFilter->numBuckets * filter->bucketSize, sizeof(CuckooBucket));
                     filter->numFilters = 1;
@@ -58,11 +65,9 @@ void *rotate(void *arg){
                 filter->filters = filtersArray;
                 filter->numFilters = new_len;
             }
+            pthread_rwlock_unlock(&(filter->lock));
         }
-
-        pthread_rwlock_unlock(&(filter->lock));
-
-        sleep(filter->ttl);
+        sleep(1);
     }
 
   return NULL;
@@ -96,12 +101,12 @@ int CuckooFilter_Init(CuckooFilter *filter, uint64_t capacity, uint16_t bucketSi
     }
     assert(isPower2(filter->numBuckets));
 
+    pthread_rwlock_init(&(filter->lock), NULL);
+    pthread_create(&(filter->thread_rotate), NULL, rotate, filter);
+
     if (CuckooFilter_Grow(filter) != 0) {
         return -1; // LCOV_EXCL_LINE memory failure
     }
-    pthread_rwlock_init(&(filter->lock), NULL);
-
-	pthread_create(&(filter->thread_rotate), NULL, rotate, filter);
     return 0;
 }
 
@@ -127,7 +132,7 @@ static int CuckooFilter_Grow(CuckooFilter *filter) {
     SubCF *currentFilter = filtersArray + filter->numFilters;
     currentFilter->bucketSize = filter->bucketSize;
     currentFilter->numBuckets = filter->numBuckets;
-    currentFilter->expire_time = time(0) + filter->ttl;
+    currentFilter->expire_time = time(0) + filter->ttl*2;
     currentFilter->data =
         CUCKOO_CALLOC((size_t)currentFilter->numBuckets * filter->bucketSize, sizeof(CuckooBucket));
     if (!currentFilter->data) {
@@ -261,23 +266,30 @@ static CuckooInsertStatus Filter_KOInsert(CuckooFilter *filter, SubCF *curFilter
 
 static CuckooInsertStatus CuckooFilter_InsertFP(CuckooFilter *filter, const LookupParams *params) {
     pthread_rwlock_rdlock(&(filter->lock));
+    time_t now = time(0) + filter->ttl - 1;
     for (uint16_t ii = filter->numFilters; ii > 0; --ii) {
-        uint8_t *slot = Filter_FindAvailable(&filter->filters[ii - 1], params);
-        if (slot) {
-            *slot = params->fp;
-            filter->numItems++;
-            pthread_rwlock_unlock(&(filter->lock));
-            return CuckooInsert_Inserted;
+        if(filter->filters[ii].expire_time > now){
+            uint8_t *slot = Filter_FindAvailable(&filter->filters[ii - 1], params);
+            if (slot) {
+                *slot = params->fp;
+                filter->numItems++;
+                pthread_rwlock_unlock(&(filter->lock));
+                return CuckooInsert_Inserted;
+            }
+        } else {
+            break;
         }
     }
 
     // No space. Time to evict!
-    CuckooInsertStatus status =
-        Filter_KOInsert(filter, &filter->filters[filter->numFilters - 1], params);
-    if (status == CuckooInsert_Inserted) {
-        filter->numItems++;
-        pthread_rwlock_unlock(&(filter->lock));
-        return CuckooInsert_Inserted;
+    if(filter->filters[filter->numFilters - 1].expire_time > now){
+        CuckooInsertStatus status =
+            Filter_KOInsert(filter, &filter->filters[filter->numFilters - 1], params);
+        if (status == CuckooInsert_Inserted) {
+            filter->numItems++;
+            pthread_rwlock_unlock(&(filter->lock));
+            return CuckooInsert_Inserted;
+        }
     }
 
     pthread_rwlock_unlock(&(filter->lock));
