@@ -44,15 +44,15 @@ void *rotate(void *arg){
             uint16_t new_len = filter->numFilters - del_count;
             if (new_len == 0){
                 CUCKOO_FREE(filter->filters);
-                    SubCF *filtersArray = CUCKOO_REALLOC(filter->filters, sizeof(*filtersArray));
-                    SubCF *currentFilter = filtersArray;
-                    currentFilter->bucketSize = filter->bucketSize;
-                    currentFilter->numBuckets = filter->numBuckets;
-                    currentFilter->expire_time = time(0) + filter->ttl*2;
-                    currentFilter->data =
-                    CUCKOO_CALLOC((size_t)currentFilter->numBuckets * filter->bucketSize, sizeof(CuckooBucket));
-                    filter->numFilters = 1;
-                    filter->filters = filtersArray;
+                SubCF *filtersArray = CUCKOO_REALLOC(filter->filters, sizeof(*filtersArray));
+                SubCF *currentFilter = filtersArray;
+                currentFilter->bucketSize = filter->bucketSize;
+                currentFilter->numBuckets = filter->numBuckets;
+                currentFilter->expire_time = time(0) + filter->ttl*2;
+                currentFilter->data =
+                CUCKOO_CALLOC((size_t)currentFilter->numBuckets * filter->bucketSize, sizeof(CuckooBucket));
+                filter->numFilters = 1;
+                filter->filters = filtersArray;
             }else {
                 SubCF *filtersArray = CUCKOO_REALLOC(filter->filters, sizeof(*filtersArray) * (new_len));
                 for(int i=del_count; i < filter->numFilters; i++){
